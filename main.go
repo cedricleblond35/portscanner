@@ -1,12 +1,13 @@
 package portscanner
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
 )
 
-type Portscanner struct {
+type PortScanner struct {
 	Host       string
 	StartPort  int
 	EndPort    int
@@ -21,8 +22,8 @@ type Portscanner struct {
 
 type DialerFunc func(network, address string, timeout time.Duration) (net.Conn, error)
 
-func NewPortScanner(host string, start, end int) *Portscanner {
-	return &Portscanner{
+func NewPortScanner(host string, start, end int) *PortScanner {
+	return &PortScanner{
 		Host:       host,
 		StartPort:  start,
 		EndPort:    end,
@@ -33,7 +34,7 @@ func NewPortScanner(host string, start, end int) *Portscanner {
 	}
 }
 
-func (ps *Portscanner) ScanPort(port int, wg *sync.WaitGroup, results chan<- string, dialer DialerFunc) {
+func (ps *PortScanner) ScanPort(port int, wg *sync.WaitGroup, results chan<- string, dialer DialerFunc) {
 	defer wg.Done()
 
 	select {
@@ -41,5 +42,53 @@ func (ps *Portscanner) ScanPort(port int, wg *sync.WaitGroup, results chan<- str
 		return
 	default:
 	}
-	
+	address := fmt.Sprintf("%s:%d", ps.Host, port)
+	conn, err := dialer("tcp", address, ps.Timeout)
+	if err == nil {
+		conn.Close()
+		ps.mu.Lock()
+		ps.OpenPorts = append(ps.OpenPorts, port)
+		ps.mu.Unlock()
+		results <- fmt.Sprintf("Port %d : OUVERT", port)
+	} else {
+		results <- fmt.Sprintf("Port %d : fermé ou filtré", port)
+	}
+
+	ps.mu.Lock()
+	ps.scanned++
+	ps.mu.Unlock()
+}
+
+// Scan lance le scan sur toute la plage de ports
+func (ps *PortScanner) Scan() []string {
+	ps.running = true
+	var wg sync.WaitGroup
+	results := make(chan string, ps.EndPort-ps.StartPort+1)
+	var output []string
+
+	for port := ps.StartPort; port <= ps.EndPort; port++ {
+		wg.Add(1)
+		go ps.ScanPort(port, &wg, results, net.DialTimeout)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		output = append(output, result)
+	}
+
+	ps.running = false
+	return output
+}
+
+// Stop arrête le scan
+func (ps *PortScanner) Stop() {
+	if ps.running {
+		close(ps.stopChan)
+		ps.running = false
+		ps.stopChan = make(chan struct{})
+	}
 }
