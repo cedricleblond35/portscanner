@@ -1,4 +1,4 @@
-package portscanner
+package cmd
 
 import (
 	"fmt"
