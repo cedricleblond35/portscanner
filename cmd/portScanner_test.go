@@ -112,6 +112,7 @@ func TestScan(t *testing.T) {
 	scanner := NewPortScanner("localhost", 8079, 8081)
 	results := scanner.Scan()
 
+	// Check results
 	expected := []string{
 		"Port 8079: closed or filtered",
 		"Port 8080: OPEN",
@@ -143,7 +144,7 @@ func TestScan(t *testing.T) {
 // TestStop tests the Stop method
 func TestStop(t *testing.T) {
 	scanner := NewPortScanner("localhost", 1, 10)
-	scanner.running = true
+	scanner.running = true	// Simulate a running scan
 
 	scanner.Stop()
 
@@ -152,10 +153,12 @@ func TestStop(t *testing.T) {
 	}
 	select {
 	case <-scanner.stopChan:
+		// Channel should be closed
 	default:
 		t.Error("Expected stopChan to be closed after Stop")
 	}
 
+	// Verify reset for future scans
 	scanner.running = true
 	scanner.Stop()
 	if scanner.running {
